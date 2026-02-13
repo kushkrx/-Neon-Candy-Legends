@@ -174,8 +174,9 @@
       border-radius: 12px;
       box-shadow: inset 0 1px 6px rgba(255,255,255,0.45), 0 5px 14px rgba(0,0,0,0.32);
       animation: popIn 180ms ease;
-      transition: transform 180ms ease, filter 180ms ease;
+      transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), filter 180ms ease;
       cursor: pointer;
+      will-change: transform;
     }
 
     .candy-glyph {
@@ -346,6 +347,56 @@
       box-shadow: 0 8px 22px rgba(105,240,255,0.35);
     }
 
+    .help-fab {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      width: 54px;
+      height: 54px;
+      border: 1px solid rgba(255,255,255,0.45);
+      border-radius: 50%;
+      background: linear-gradient(160deg, rgba(255,255,255,0.26), rgba(255,255,255,0.1));
+      color: #f5fbff;
+      font: inherit;
+      font-size: 28px;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35), 0 0 24px rgba(126, 255, 228, 0.55);
+      backdrop-filter: blur(6px);
+      z-index: 60;
+      animation: helpGlow 1.8s ease-in-out infinite alternate;
+    }
+
+    @keyframes helpGlow {
+      from { transform: translateY(0) scale(1); box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35), 0 0 20px rgba(126, 255, 228, 0.42); }
+      to { transform: translateY(-1px) scale(1.03); box-shadow: 0 14px 34px rgba(0, 0, 0, 0.42), 0 0 28px rgba(126, 255, 228, 0.72); }
+    }
+
+    .help-content {
+      text-align: left;
+      margin: 10px 0 0;
+      max-height: min(60vh, 520px);
+      overflow: auto;
+      padding-right: 4px;
+      line-height: 1.45;
+      font-size: 14px;
+    }
+
+    .help-content h3 {
+      margin: 12px 0 6px;
+      font-size: 16px;
+    }
+
+    .help-content p {
+      margin: 4px 0;
+      opacity: 0.95;
+    }
+
+    .help-content .mini {
+      font-size: 13px;
+      opacity: 0.8;
+    }
+
     .shop-panel {
       margin-top: 10px;
       display: grid;
@@ -381,9 +432,19 @@
       z-index: 2;
     }
 
+    .cell.hint-marker .candy {
+      animation: hintCandy 850ms ease-in-out infinite alternate;
+      z-index: 3;
+    }
+
     @keyframes hintPulse {
       from { transform: scale(0.92); opacity: 0.75; }
       to { transform: scale(1.03); opacity: 1; }
+    }
+
+    @keyframes hintCandy {
+      from { transform: scale(0.98) translateY(0); filter: brightness(1); }
+      to { transform: scale(1.09) translateY(-2px); filter: brightness(1.2); }
     }
 
     @media (max-width: 820px) {
@@ -460,6 +521,39 @@
     </div>
   </div>
 
+  <div class="overlay" id="helpOverlay">
+    <div class="panel">
+      <h2>How To Play</h2>
+      <div class="help-content">
+        <h3>Goal</h3>
+        <p>Match candies to reach the target score before moves run out.</p>
+
+        <h3>Controls</h3>
+        <p>Desktop: click one candy, then an adjacent candy to swap.</p>
+        <p>Mobile: tap or swipe a candy toward a neighbor.</p>
+        <p class="mini">Invalid swaps automatically move back.</p>
+
+        <h3>Special Matches</h3>
+        <p>Match 4: creates striped candy.</p>
+        <p>Match 5: creates color bomb.</p>
+        <p>L/T shape: creates wrapped candy.</p>
+        <p>Chain reactions increase combo multiplier and points.</p>
+
+        <h3>Boosters & Shop</h3>
+        <p>Use Hammer, Bomb, Lollipop, Shuffle, Extra Moves, and Hint.</p>
+        <p>Earn points from matches and combos, then buy Hint/Bomb/Lollipop.</p>
+
+        <h3>Adventure Tips</h3>
+        <p>1. Clear jelly and locked areas early.</p>
+        <p>2. Save Bomb/Lollipop for tight moves.</p>
+        <p>3. Watch for neon auto-hint if you are stuck.</p>
+      </div>
+      <button class="btn" id="closeHelpBtn">Close</button>
+    </div>
+  </div>
+
+  <button class="help-fab" id="helpBtn" aria-label="How to play">?</button>
+
   <script>
     const COLORS = ["#ff4ecd", "#29b6ff", "#3dff8f", "#ffe45e", "#ff8f3f", "#b37dff"];
     const CANDY_GLYPHS = ["🍓", "🫐", "🍏", "🍋", "🍊", "🍇"];
@@ -478,6 +572,7 @@
       startOverlay: document.getElementById("startOverlay"),
       levelOverlay: document.getElementById("levelOverlay"),
       gameOverOverlay: document.getElementById("gameOverOverlay"),
+      helpOverlay: document.getElementById("helpOverlay"),
       levelResult: document.getElementById("levelResult"),
       gameOverText: document.getElementById("gameOverText"),
       bHammer: document.getElementById("b-hammer"),
@@ -488,7 +583,9 @@
       bHint: document.getElementById("b-hint"),
       buyHintBtn: document.getElementById("buyHintBtn"),
       buyBombBtn: document.getElementById("buyBombBtn"),
-      buyLollipopBtn: document.getElementById("buyLollipopBtn")
+      buyLollipopBtn: document.getElementById("buyLollipopBtn"),
+      helpBtn: document.getElementById("helpBtn"),
+      closeHelpBtn: document.getElementById("closeHelpBtn")
     };
 
     const boosterButtons = [...document.querySelectorAll(".booster")];
@@ -514,7 +611,8 @@
       pendingChocolateSpread: false,
       hintCells: [],
       rewardClaimed: false,
-      levelCleared: false
+      levelCleared: false,
+      idleHintTimer: null
     };
 
     function makeLevels() {
@@ -630,6 +728,7 @@
       setBoardDimensions();
       renderBoard();
       updateHud();
+      scheduleAutoHint(4500);
     }
 
     function candyClass(cell, selected) {
@@ -730,6 +829,46 @@
       state.hintCells = [];
     }
 
+    function clearIdleHintTimer() {
+      if (state.idleHintTimer) {
+        clearTimeout(state.idleHintTimer);
+        state.idleHintTimer = null;
+      }
+    }
+
+    function scheduleAutoHint(delay = 6000) {
+      clearIdleHintTimer();
+      state.idleHintTimer = setTimeout(() => {
+        if (state.busy || state.activeBooster) return;
+        if (els.levelOverlay.classList.contains("show") || els.gameOverOverlay.classList.contains("show") || els.startOverlay.classList.contains("show")) return;
+        if (state.hintCells.length) return;
+        const hint = findHintMove();
+        if (!hint) return;
+        state.hintCells = hint;
+        emitSound("hint");
+        renderBoard();
+      }, delay);
+    }
+
+    function markInteraction() {
+      if (state.hintCells.length) clearHints();
+      scheduleAutoHint(6000);
+    }
+
+    async function animateSwapMotion(a, b) {
+      const elA = els.board.querySelector(`.cell[data-r="${a.r}"][data-c="${a.c}"] .candy`);
+      const elB = els.board.querySelector(`.cell[data-r="${b.r}"][data-c="${b.c}"] .candy`);
+      if (!elA || !elB) return;
+      const cellSize = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--tile-size"));
+      const gap = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--board-gap"));
+      const dx = (b.c - a.c) * (cellSize + gap);
+      const dy = (b.r - a.r) * (cellSize + gap);
+      const timing = { duration: 180, easing: "cubic-bezier(0.22, 1, 0.36, 1)", fill: "forwards" };
+      const anA = elA.animate([{ transform: "translate(0,0)" }, { transform: `translate(${dx}px, ${dy}px)` }], timing);
+      const anB = elB.animate([{ transform: "translate(0,0)" }, { transform: `translate(${-dx}px, ${-dy}px)` }], timing);
+      await Promise.allSettled([anA.finished, anB.finished]);
+    }
+
     function findHintMove() {
       for (let r = 0; r < state.rows; r++) {
         for (let c = 0; c < state.cols; c++) {
@@ -757,7 +896,7 @@
 
     async function swapCandies(a, b) {
       if (state.busy || !areAdjacent(a, b)) return;
-      clearHints();
+      markInteraction();
       const cellA = state.board[a.r][a.c];
       const cellB = state.board[b.r][b.c];
       if (!isSelectable(a.r, a.c) || !isSelectable(b.r, b.c)) return;
@@ -769,6 +908,7 @@
       state.busy = true;
       state.selected = null;
       state.lastSwap = [a, b];
+      await animateSwapMotion(a, b);
       swapData(a, b);
       renderBoard();
       emitSound("swap");
@@ -786,6 +926,7 @@
       }
 
       if (!valid) {
+        await animateSwapMotion(a, b);
         swapData(a, b);
         emitSound("invalid");
         await sleep(120);
@@ -1236,7 +1377,7 @@
 
     async function applyBooster(type, r = null, c = null) {
       if (state.busy || !state.boosters[type] || state.boosters[type] <= 0) return;
-      clearHints();
+      markInteraction();
       if (type === "hint") {
         const hint = findHintMove();
         state.boosters.hint--;
@@ -1297,6 +1438,7 @@
       updateHud();
       await ensurePlayable();
       checkEndState();
+      scheduleAutoHint(5000);
     }
 
     function nextLevel() {
@@ -1351,7 +1493,7 @@
       if (state.busy) return;
       if (state.activeBooster) { applyBooster(state.activeBooster, r, c); return; }
       if (!isSelectable(r, c)) return;
-      if (state.hintCells.length) clearHints();
+      markInteraction();
       if (!state.selected) { state.selected = { r, c }; renderBoard(); return; }
       if (state.selected.r === r && state.selected.c === c) { state.selected = null; renderBoard(); return; }
       if (!areAdjacent(state.selected, { r, c })) { state.selected = { r, c }; renderBoard(); return; }
@@ -1395,25 +1537,50 @@
         btn.addEventListener("click", () => {
           const type = btn.dataset.booster;
           if (state.busy || state.boosters[type] <= 0) return;
+          markInteraction();
           if (type === "shuffle" || type === "extraMoves" || type === "hint") { applyBooster(type); return; }
           state.activeBooster = state.activeBooster === type ? null : type;
           state.selected = null;
-          clearHints();
           renderBoard();
           updateHud();
         });
       });
 
-      els.buyHintBtn.addEventListener("click", () => buyItem("hint", 120));
-      els.buyBombBtn.addEventListener("click", () => buyItem("bomb", 350));
-      els.buyLollipopBtn.addEventListener("click", () => buyItem("lollipop", 300));
+      els.buyHintBtn.addEventListener("click", () => { markInteraction(); buyItem("hint", 120); });
+      els.buyBombBtn.addEventListener("click", () => { markInteraction(); buyItem("bomb", 350); });
+      els.buyLollipopBtn.addEventListener("click", () => { markInteraction(); buyItem("lollipop", 300); });
+
+      const openHelp = () => {
+        clearIdleHintTimer();
+        clearHints();
+        renderBoard();
+        els.helpOverlay.classList.add("show");
+      };
+      const closeHelp = () => {
+        els.helpOverlay.classList.remove("show");
+        scheduleAutoHint(4500);
+      };
+      els.helpBtn.addEventListener("click", openHelp);
+      els.closeHelpBtn.addEventListener("click", closeHelp);
+      els.helpOverlay.addEventListener("click", (e) => {
+        if (e.target === els.helpOverlay) closeHelp();
+      });
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && els.helpOverlay.classList.contains("show")) closeHelp();
+        if ((e.key === "h" || e.key === "H") && !els.helpOverlay.classList.contains("show")) openHelp();
+      });
 
       document.getElementById("startBtn").addEventListener("click", () => {
         initAudio();
         els.startOverlay.classList.remove("show");
         createBoard();
+        emitSound("purchase");
       });
-      document.getElementById("nextLevelBtn").addEventListener("click", () => { els.levelOverlay.classList.remove("show"); nextLevel(); });
+      document.getElementById("nextLevelBtn").addEventListener("click", () => {
+        els.levelOverlay.classList.remove("show");
+        markInteraction();
+        nextLevel();
+      });
       document.getElementById("restartBtn").addEventListener("click", () => {
         els.gameOverOverlay.classList.remove("show");
         state.level = 1;
@@ -1423,6 +1590,7 @@
         state.levelCleared = false;
         state.boosters = { hammer: 2, bomb: 1, lollipop: 1, shuffle: 1, extraMoves: 1, hint: 1 };
         state.milestone = 2500;
+        clearIdleHintTimer();
         createBoard();
       });
     }
